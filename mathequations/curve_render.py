@@ -11,6 +11,15 @@ import numpy as np
 Point = tuple[float, float]
 
 
+def _hex_to_bgr(color: str) -> tuple[int, int, int]:
+    if len(color) != 7 or not color.startswith("#"):
+        return (0, 0, 0)
+    red = int(color[1:3], 16)
+    green = int(color[3:5], 16)
+    blue = int(color[5:7], 16)
+    return (blue, green, red)
+
+
 def _payload_to_point(payload: dict[str, float]) -> Point:
     return (float(payload["x"]), float(payload["y"]))
 
@@ -116,7 +125,7 @@ def render_curve_segments(
                 canvas,
                 [np.array(pixels, dtype=np.int32).reshape((-1, 1, 2))],
                 isClosed=False,
-                color=(0, 0, 0),
+                color=_hex_to_bgr(str(segment.get("color", "#000000"))),
                 thickness=max(1, int(line_thickness * render_scale)),
                 lineType=cv2.LINE_AA,
             )

@@ -62,6 +62,28 @@ class CurveRenderTests(unittest.TestCase):
         self.assertIsNotNone(image)
         self.assertLess(int(np.min(image)), 250)
 
+    def test_render_curve_segments_uses_segment_color_metadata(self):
+        segment = linear_segment(1, 1, (-5.0, 0.0), (5.0, 0.0))
+        segment["color"] = "#f5d529"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "yellow.png"
+            render_curve_segments(
+                [segment],
+                path,
+                image_size=(80, 40),
+                scale=4.0,
+                line_thickness=3,
+            )
+            image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+
+        self.assertIsNotNone(image)
+        nonwhite = image[np.any(image < 250, axis=2)]
+        self.assertGreater(len(nonwhite), 0)
+        mean_bgr = nonwhite.mean(axis=0)
+        self.assertGreater(mean_bgr[1], mean_bgr[0])
+        self.assertGreater(mean_bgr[2], mean_bgr[0])
+
     def test_render_curve_segment_previews_writes_highres_and_downsampled(self):
         segments = [linear_segment(1, 1, (-5.0, 0.0), (5.0, 0.0))]
 
