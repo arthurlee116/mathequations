@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -79,6 +80,16 @@ class StrokeChain:
         if self.closed and len(self.points) > 1:
             total += math.hypot(self.points[0][0] - self.points[-1][0], self.points[0][1] - self.points[-1][1])
         return total
+
+
+@dataclass(frozen=True)
+class JunctionBranchPair:
+    """Two raw branches paired through one junction by tangent continuity."""
+
+    junction_id: int
+    branch_a_id: int
+    branch_b_id: int
+    angle_degrees: float
 
 
 @dataclass
@@ -284,3 +295,212 @@ def estimate_endpoint_tangent(branch: RawBranch, endpoint: Endpoint) -> tuple[fl
         outer = branch.points[-1]
         return _unit_vector(outer[0] - inner[0], outer[1] - inner[1])
     raise ValueError("endpoint is not attached to branch")
+
+
+def _branch_end_tangent(branch: RawBranch, end_name: str) -> tuple[float, float]:
+    if len(branch.points) < 2:
+        return (0.0, 0.0)
+    lookahead = min(4, len(branch.points) - 1)
+    if end_name == "start":
+        outer = branch.points[0]
+        inner = branch.points[lookahead]
+        return _unit_vector(inner[0] - outer[0], inner[1] - outer[1])
+    if end_name == "end":
+        outer = branch.points[-1]
+        inner = branch.points[-1 - lookahead]
+        return _unit_vector(inner[0] - outer[0], inner[1] - outer[1])
+    raise ValueError("end_name must be start or end")
+
+
+def _branch_junction_end(branch: RawBranch, junction_id: int) -> str | None:
+    if branch.start_junction_id == junction_id:
+        return "start"
+    if branch.end_junction_id == junction_id:
+        return "end"
+    return None
+
+
+def _branch_endpoint_end(branch: RawBranch, endpoint_id: int) -> str | None:
+    if branch.start_endpoint_id == endpoint_id:
+        return "start"
+    if branch.end_endpoint_id == endpoint_id:
+        return "end"
+    return None
+
+
+def pair_junction_branches(
+    graph: SkeletonGraph,
+    *,
+    angle_threshold_degrees: float = 35,
+) -> list[JunctionBranchPair]:
+    """Pair branches that continue straight through a junction."""
+    branches = trace_raw_branches(graph)
+    pairs: list[JunctionBranchPair] = []
+    for junction in graph.junctions:
+        incident: list[tuple[RawBranch, str, tuple[float, float]]] = []
+        for branch in branches:
+            end_name = _branch_junction_end(branch, junction.junction_id)
+            if end_name is not None:
+                incident.append((branch, end_name, _branch_end_tangent(branch, end_name)))
+        if len(incident) < 2:
+            continue
+        options: list[tuple[float, RawBranch, RawBranch]] = []
+        for left_index, (branch_a, _end_a, tangent_a) in enumerate(incident):
+            for branch_b, _end_b, tangent_b in incident[left_index + 1 :]:
+                straightness = math.degrees(math.acos(max(-1.0, min(1.0, -(
+                    tangent_a[0] * tangent_b[0] + tangent_a[1] * tangent_b[1]
+                )))))
+                options.append((straightness, branch_a, branch_b))
+        options.sort(key=lambda item: (item[0], item[1].branch_id, item[2].branch_id))
+        used: set[int] = set()
+        for angle, branch_a, branch_b in options:
+            if angle > angle_threshold_degrees:
+                continue
+            if branch_a.branch_id in used or branch_b.branch_id in used:
+                continue
+            pairs.append(
+                JunctionBranchPair(
+                    junction_id=junction.junction_id,
+                    branch_a_id=branch_a.branch_id,
+                    branch_b_id=branch_b.branch_id,
+                    angle_degrees=float(angle),
+                )
+            )
+            used.add(branch_a.branch_id)
+            used.add(branch_b.branch_id)
+    graph.diagnostics["junction_pair_count"] = len(pairs)
+    return pairs
+
+
+def _append_ordered_points(target: list[Point], points: list[Point]) -> None:
+    if not points:
+        return
+    if target and target[-1] == points[0]:
+        target.extend(points[1:])
+    else:
+        target.extend(points)
+
+
+def _chain_from_branch_end(
+    start: tuple[int, str],
+    *,
+    branches_by_id: dict[int, RawBranch],
+    connections: dict[tuple[int, str], tuple[int, str]],
+    visited: set[int],
+) -> tuple[list[Point], tuple[int, ...], bool]:
+    current = start
+    points: list[Point] = []
+    branch_ids: list[int] = []
+    closed = False
+    while True:
+        branch_id, end_name = current
+        if branch_id in visited:
+            closed = True
+            break
+        branch = branches_by_id[branch_id]
+        visited.add(branch_id)
+        branch_ids.append(branch_id)
+        if end_name == "start":
+            ordered = branch.points
+            exit_end = (branch_id, "end")
+        else:
+            ordered = list(reversed(branch.points))
+            exit_end = (branch_id, "start")
+        _append_ordered_points(points, ordered)
+        next_end = connections.get(exit_end)
+        if next_end is None:
+            break
+        current = next_end
+    return points, tuple(branch_ids), closed
+
+
+def build_stroke_chains(
+    graph: SkeletonGraph,
+    branches: list[RawBranch],
+    bridges: list[Any],
+    junction_pairs: list[JunctionBranchPair],
+    *,
+    min_chain_length: float = 0,
+) -> list[StrokeChain]:
+    """Join raw branches into deterministic stroke chains."""
+    branches_by_id = {branch.branch_id: branch for branch in branches}
+    connections: dict[tuple[int, str], tuple[int, str]] = {}
+
+    def connect(left: tuple[int, str] | None, right: tuple[int, str] | None) -> None:
+        if left is None or right is None:
+            return
+        connections[left] = right
+        connections[right] = left
+
+    for bridge in bridges:
+        branch_a = branches_by_id.get(int(bridge.branch_a_id))
+        branch_b = branches_by_id.get(int(bridge.branch_b_id))
+        if branch_a is None or branch_b is None:
+            continue
+        end_a = _branch_endpoint_end(branch_a, int(bridge.endpoint_a_id))
+        end_b = _branch_endpoint_end(branch_b, int(bridge.endpoint_b_id))
+        connect(
+            (branch_a.branch_id, end_a) if end_a else None,
+            (branch_b.branch_id, end_b) if end_b else None,
+        )
+
+    for pair in junction_pairs:
+        branch_a = branches_by_id.get(pair.branch_a_id)
+        branch_b = branches_by_id.get(pair.branch_b_id)
+        if branch_a is None or branch_b is None:
+            continue
+        end_a = _branch_junction_end(branch_a, pair.junction_id)
+        end_b = _branch_junction_end(branch_b, pair.junction_id)
+        connect(
+            (branch_a.branch_id, end_a) if end_a else None,
+            (branch_b.branch_id, end_b) if end_b else None,
+        )
+
+    chains: list[StrokeChain] = []
+    visited: set[int] = set()
+    dropped = 0
+
+    def add_chain(points: list[Point], branch_ids: tuple[int, ...], *, closed: bool) -> None:
+        nonlocal dropped
+        chain = StrokeChain(len(chains) + 1, points, branch_ids=branch_ids, closed=closed)
+        if chain.length < min_chain_length:
+            dropped += 1
+            return
+        chains.append(chain)
+
+    for branch in sorted(branches, key=lambda item: item.branch_id):
+        if branch.branch_id in visited:
+            continue
+        if branch.closed and (branch.branch_id, "start") not in connections and (branch.branch_id, "end") not in connections:
+            visited.add(branch.branch_id)
+            add_chain(branch.points, (branch.branch_id,), closed=True)
+            continue
+        open_ends = [
+            (branch.branch_id, end_name)
+            for end_name in ("start", "end")
+            if (branch.branch_id, end_name) not in connections
+        ]
+        if not open_ends:
+            continue
+        points, branch_ids, closed = _chain_from_branch_end(
+            open_ends[0],
+            branches_by_id=branches_by_id,
+            connections=connections,
+            visited=visited,
+        )
+        add_chain(points, branch_ids, closed=closed)
+
+    for branch in sorted(branches, key=lambda item: item.branch_id):
+        if branch.branch_id in visited:
+            continue
+        points, branch_ids, closed = _chain_from_branch_end(
+            (branch.branch_id, "start"),
+            branches_by_id=branches_by_id,
+            connections=connections,
+            visited=visited,
+        )
+        add_chain(points, branch_ids, closed=closed or branch.closed)
+
+    graph.diagnostics["final_stroke_chain_count"] = len(chains)
+    graph.diagnostics["dropped_fragment_count"] = dropped
+    return chains

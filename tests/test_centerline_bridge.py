@@ -8,6 +8,7 @@ from mathequations.centerline_bridge import (
     select_bridges,
 )
 from mathequations.centerline_graph import build_skeleton_graph, trace_raw_branches
+from mathequations.centerline_graph import build_stroke_chains, pair_junction_branches
 
 
 class CenterlineBridgeTests(unittest.TestCase):
@@ -81,6 +82,21 @@ class CenterlineBridgeTests(unittest.TestCase):
             "score",
         ]:
             self.assertIn(key, candidate.diagnostics)
+
+    def test_broken_stroke_becomes_one_chain_after_bridge_acceptance(self):
+        skeleton = np.zeros((20, 50), dtype=np.uint8)
+        skeleton[10, 4:14] = 255
+        skeleton[10, 20:30] = 255
+        skeleton[10, 36:46] = 255
+        graph = build_skeleton_graph(skeleton)
+        branches = trace_raw_branches(graph)
+        bridges = select_bridges(find_bridge_candidates(graph, max_gap=8, angle_threshold_degrees=35))
+
+        chains = build_stroke_chains(graph, branches, bridges, pair_junction_branches(graph))
+
+        self.assertEqual(len(branches), 3)
+        self.assertEqual(len(chains), 1)
+        self.assertGreater(chains[0].point_count, max(branch.point_count for branch in branches))
 
 
 if __name__ == "__main__":
