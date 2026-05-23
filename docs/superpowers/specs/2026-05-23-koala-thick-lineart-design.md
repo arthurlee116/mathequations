@@ -2,7 +2,7 @@
 
 ## Goal
 
-Convert the provided koala image into real Desmos-usable function expressions that preserve visible stroke thickness by stacking adjacent offset function lines. The output should cover black outline/details, yellow rays, and the pink mouth.
+Convert the provided koala image into real Desmos-usable expressions that preserve visible stroke thickness by stacking adjacent offset function lines. For this koala image, the output must cover black outline/details, yellow rays, and the pink mouth.
 
 Source image:
 
@@ -30,11 +30,17 @@ Use stacked offset functions.
 
 The pipeline should keep the current centerline tracing and curve fitting ideas, then estimate stroke width from the source mask and emit neighboring function copies across the stroke normal. Desmos `lineWidth` may still be used as display metadata, but the primary thickness mechanism must be actual expressions.
 
+In this spec, "function expressions" means Desmos-compatible math expressions, including:
+
+- Restricted `y = f(x)` expressions.
+- Restricted vertical `x = c` expressions.
+- Parametric `(x(t), y(t))` expressions.
+
 Approved scope:
 
-- Include black outline and facial details.
-- Include yellow rays.
-- Include pink mouth.
+- Require black outline and facial details.
+- Require yellow rays.
+- Require pink mouth.
 - Prioritize real Desmos function expressions over a preview-only trick.
 - Accept more equations if that is the price of true stacked thickness.
 
@@ -51,6 +57,10 @@ rtk python -m mathequations thick-lineart \
   --max-offsets 9 \
   --keep-diagnostics
 ```
+
+Offset CLI units are source-image pixels. `--offset-step 1` means one source pixel between neighboring stack copies before coordinate conversion. During export, pixel offsets are multiplied by the pipeline `scale` to produce Cartesian offset distances.
+
+`--max-offsets` is the total stack count per source segment, not the count per side. It must be an odd positive integer so every stack includes the centerline with `offset_index = 0`. For `--max-offsets 9`, valid offset indices are `-4, -3, -2, -1, 0, 1, 2, 3, 4`.
 
 Pipeline steps:
 
@@ -97,7 +107,7 @@ Behavior:
 - Vertical segments offset by shifting `x = c`.
 - Quadratic segments may be sampled and exported as parametric polyline offsets when direct offsetting would lie.
 - Cubic Bezier and parametric polyline segments should use sampled normals and export offset polylines.
-- Every emitted segment keeps `source_segment_id`, `offset_index`, `offset_distance`, `stroke_radius`, and color metadata.
+- Every emitted segment keeps `source_segment_id`, `offset_index`, `offset_pixels`, `offset_distance`, `stroke_radius`, and color metadata.
 
 ### `mathequations/thick_lineart_pipeline.py`
 
@@ -151,6 +161,7 @@ Segment metadata should look like:
   "color_name": "black",
   "color": "#000000",
   "offset_index": -3,
+  "offset_pixels": -3.0,
   "offset_distance": -0.048,
   "stroke_radius": 0.112,
   "type": "linear"
@@ -161,11 +172,13 @@ This makes failures debuggable. If the mouth is wrong, we can isolate whether th
 
 ## Error Handling
 
-Black is required. If the black mask is missing or produces no strokes, fail with a clear `ValueError`.
+Black, yellow, and pink are all required for this koala pipeline. If any required color mask is missing or produces no strokes, fail with a clear `ValueError`.
 
-Yellow and pink are optional. If either mask is missing or produces no strokes, continue and record a warning in metadata.
+A future generalized image mode may make non-black colors optional, but that behavior is out of scope for this koala implementation.
 
 Width estimates must be clamped to avoid one noisy pixel producing absurd stacks. If offsetting a segment as its original type would be inaccurate, degrade to `parametric_polyline`.
+
+Reject even `--max-offsets` values with a clear `ValueError`. Reject non-positive `--offset-step` values with a clear `ValueError`.
 
 ## Testing
 
@@ -177,9 +190,9 @@ Add focused synthetic tests first:
 - Vertical offset shifts `x = c` correctly.
 - Curved offset can fall back to parametric polyline with color and source metadata.
 - Pipeline writes all expected artifacts.
-- Desmos export includes colored stacked expressions.
+- Desmos export includes colored stacked expressions with `offset_pixels` and Cartesian `offset_distance` metadata.
 
-Then run the real koala image as a diagnostic smoke run. The smoke run should verify that masks are nonblank and that output expression count is substantially higher than the 72-expression skinny baseline.
+Then run the real koala image as a diagnostic smoke run. The smoke run should verify that masks are nonblank, black/yellow/pink each have nonzero stacked segments, at least one `source_segment_id` per required color has multiple distinct `offset_index` values, and output expression count is substantially higher than the 72-expression skinny baseline.
 
 Verification commands:
 
@@ -193,9 +206,13 @@ rtk python -m mathequations thick-lineart --input '/Users/arthur/Library/Contain
 
 - The new CLI subcommand runs on the koala source image.
 - `segments.json` contains black, yellow, and pink offset segments.
+- Black, yellow, and pink each have nonzero stacked segments in the koala smoke run.
+- At least one `source_segment_id` for each required color has multiple distinct `offset_index` values.
+- Segment metadata stores both `offset_pixels` and Cartesian `offset_distance`.
 - Thickness comes from multiple exported expressions, not only Desmos `lineWidth`.
 - Preview output is visibly thicker than the centerline baseline.
 - The resulting Desmos expressions are colored.
+- Desmos output may use restricted `y = f(x)`, restricted `x = c`, and parametric `(x(t), y(t))` expressions.
 - Existing lineart and centerline tests still pass.
 
 ## Out Of Scope
@@ -211,4 +228,4 @@ rtk python -m mathequations thick-lineart --input '/Users/arthur/Library/Contain
 - Placeholder scan: no placeholder requirements remain.
 - Consistency check: architecture, components, data flow, and acceptance criteria all describe the same `thick-lineart` path.
 - Scope check: this is one bounded pipeline extension, not multiple independent subsystems.
-- Ambiguity check: black is required, yellow and pink are optional-but-attempted, and real stacked expressions are the primary thickness mechanism.
+- Ambiguity check: black, yellow, and pink are required for the koala; offset CLI units are source pixels; `--max-offsets` is total stack count; and real stacked expressions are the primary thickness mechanism.
