@@ -9,6 +9,7 @@ from .lineart_pipeline import run_lineart_pipeline
 from .lucas_pipeline import run_lucas_pipeline
 from .lucas_vector_pipeline import run_lucas_vector_pipeline
 from .pipeline import run_pipeline
+from .thick_lineart_pipeline import run_thick_lineart_pipeline
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -145,6 +146,72 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write Centerline V2 diagnostic overlays and JSON.",
     )
 
+    thick_lineart = subparsers.add_parser(
+        "thick-lineart",
+        help="Convert koala-style colored thick line art into stacked offset equations.",
+    )
+    thick_lineart.add_argument("--input", required=True, type=Path, help="Input image path.")
+    thick_lineart.add_argument("--out", required=True, type=Path, help="Output directory.")
+    thick_lineart.add_argument(
+        "--target",
+        default=1800,
+        type=int,
+        help="Approximate centerline source segment budget before offset stacking.",
+    )
+    thick_lineart.add_argument(
+        "--scale-width",
+        default=20.0,
+        type=float,
+        help="Coordinate-plane width for the combined color foreground.",
+    )
+    thick_lineart.add_argument(
+        "--offset-step",
+        default=1.0,
+        type=float,
+        help="Distance between stacked offset copies in source-image pixels.",
+    )
+    thick_lineart.add_argument(
+        "--max-offsets",
+        default=9,
+        type=int,
+        help="Odd total stack count per source segment, including offset_index=0.",
+    )
+    thick_lineart.add_argument(
+        "--render-scale",
+        default=4,
+        type=int,
+        help="Supersampling factor for thick-lineart previews.",
+    )
+    thick_lineart.add_argument(
+        "--min-component-area",
+        default=12,
+        type=int,
+        help="Minimum connected component area for required color masks.",
+    )
+    thick_lineart.add_argument(
+        "--min-chain-length",
+        default=8.0,
+        type=float,
+        help="Minimum traced chain length in source-image pixels.",
+    )
+    thick_lineart.add_argument(
+        "--min-radius-pixels",
+        default=1.0,
+        type=float,
+        help="Minimum sampled stroke radius in source-image pixels.",
+    )
+    thick_lineart.add_argument(
+        "--max-radius-pixels",
+        default=10.0,
+        type=float,
+        help="Maximum sampled stroke radius in source-image pixels.",
+    )
+    thick_lineart.add_argument(
+        "--keep-diagnostics",
+        action="store_true",
+        help="Write thick-lineart diagnostic JSON files.",
+    )
+
     parser.add_argument("--input", type=Path, help="Input image path.")
     parser.add_argument("--target", default=200, type=int, help="Approximate equation count.")
     parser.add_argument("--out", type=Path, help="Output directory.")
@@ -213,6 +280,27 @@ def main() -> None:
             print(f"Raw branches: {result.raw_branch_count}")
             print(f"Accepted bridges: {result.accepted_bridge_count}")
             print(f"Final chains: {result.final_chain_count}")
+        print(f"Preview: {result.function_preview_path}")
+        print(f"JSON: {result.json_path}")
+        return
+    if args.command == "thick-lineart":
+        result = run_thick_lineart_pipeline(
+            image_path=args.input,
+            out_dir=args.out,
+            target=args.target,
+            scale_width=args.scale_width,
+            offset_step_pixels=args.offset_step,
+            max_offsets=args.max_offsets,
+            render_scale=args.render_scale,
+            min_component_area=args.min_component_area,
+            min_chain_length=args.min_chain_length,
+            min_radius_pixels=args.min_radius_pixels,
+            max_radius_pixels=args.max_radius_pixels,
+            keep_diagnostics=args.keep_diagnostics,
+        )
+        print(f"Wrote {result.equation_count} thick line-art equations to {result.out_dir}")
+        print(f"Source segments: {result.source_segment_count}")
+        print(f"Color counts: {result.color_counts}")
         print(f"Preview: {result.function_preview_path}")
         print(f"JSON: {result.json_path}")
         return
