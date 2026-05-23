@@ -28,6 +28,11 @@ class LineartPipelineResult:
     function_preview_path: Path
     json_path: Path
     equations_path: Path
+    trace_mode: str = "skeleton-v1"
+    raw_branch_count: int = 0
+    endpoint_count: int = 0
+    accepted_bridge_count: int = 0
+    final_chain_count: int = 0
 
 
 def _write_text(path: Path, lines: list[str]) -> None:
@@ -84,12 +89,39 @@ def run_lineart_pipeline(
     line_thickness: int = 1,
     fit_mode: str = "mixed",
     cleaned_input: Path | None = None,
+    trace_mode: str = "skeleton-v1",
+    preprocess_scale: int = 4,
+    render_scale: int = 4,
+    max_bridge_gap: float = 16,
+    bridge_angle_threshold: float = 45,
+    local_threshold: str = "sauvola",
+    keep_diagnostics: bool = False,
 ) -> LineartPipelineResult:
     """Run the line-art conversion and write previews, equations, and JSON."""
     if target < 1:
         raise ValueError("target must be at least 1")
     if fit_mode not in {"linear", "quadratic", "mixed"}:
         raise ValueError("fit_mode must be one of: linear, quadratic, mixed")
+    if trace_mode not in {"skeleton-v1", "centerline-v2"}:
+        raise ValueError("trace_mode must be one of: skeleton-v1, centerline-v2")
+    if trace_mode == "centerline-v2":
+        from .centerline_pipeline import run_centerline_pipeline
+
+        return run_centerline_pipeline(
+            image_path=image_path,
+            out_dir=out_dir,
+            target=target,
+            scale_width=scale_width,
+            line_thickness=line_thickness,
+            fit_mode=fit_mode,
+            cleaned_input=cleaned_input,
+            preprocess_scale=preprocess_scale,
+            render_scale=render_scale,
+            max_bridge_gap=max_bridge_gap,
+            bridge_angle_threshold=bridge_angle_threshold,
+            local_threshold=local_threshold,
+            keep_diagnostics=keep_diagnostics,
+        )
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -158,6 +190,7 @@ def run_lineart_pipeline(
         scale=scale,
         target=target,
         fit_mode=fit_mode,
+        extra_metadata={"trace_mode": "skeleton-v1"},
     )
     json_path = out_dir / "segments.json"
     json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -169,4 +202,5 @@ def run_lineart_pipeline(
         function_preview_path=function_preview_path,
         json_path=json_path,
         equations_path=equations_path,
+        trace_mode="skeleton-v1",
     )

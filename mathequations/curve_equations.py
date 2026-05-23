@@ -223,18 +223,22 @@ def segments_payload(
     scale: float,
     target: int,
     fit_mode: str,
+    extra_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     width, height = image_size
+    metadata = {
+        "image_width": width,
+        "image_height": height,
+        "scale": scale,
+        "target": target,
+        "fit_mode": fit_mode,
+        "equation_count": len(segments),
+        "stroke_count": len(strokes),
+    }
+    if extra_metadata:
+        metadata.update(extra_metadata)
     return {
-        "metadata": {
-            "image_width": width,
-            "image_height": height,
-            "scale": scale,
-            "target": target,
-            "fit_mode": fit_mode,
-            "equation_count": len(segments),
-            "stroke_count": len(strokes),
-        },
+        "metadata": metadata,
         "strokes": strokes,
         "segments": segments,
     }

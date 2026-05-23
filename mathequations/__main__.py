@@ -103,6 +103,47 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Optional cleaned line-art image used instead of the raw input.",
     )
+    lineart.add_argument(
+        "--trace-mode",
+        choices=["skeleton-v1", "centerline-v2"],
+        default="skeleton-v1",
+        help="Line-art trace pipeline.",
+    )
+    lineart.add_argument(
+        "--preprocess-scale",
+        default=4,
+        type=int,
+        help="Centerline V2 preprocessing scale.",
+    )
+    lineart.add_argument(
+        "--render-scale",
+        default=4,
+        type=int,
+        help="Centerline V2 function preview render scale.",
+    )
+    lineart.add_argument(
+        "--max-bridge-gap",
+        default=16,
+        type=float,
+        help="Centerline V2 maximum endpoint bridge gap in high-res pixels.",
+    )
+    lineart.add_argument(
+        "--bridge-angle-threshold",
+        default=45,
+        type=float,
+        help="Centerline V2 endpoint bridge tangent threshold in degrees.",
+    )
+    lineart.add_argument(
+        "--local-threshold",
+        choices=["sauvola", "niblack", "adaptive", "fixed"],
+        default="sauvola",
+        help="Centerline V2 local threshold mode.",
+    )
+    lineart.add_argument(
+        "--keep-diagnostics",
+        action="store_true",
+        help="Write Centerline V2 diagnostic overlays and JSON.",
+    )
 
     parser.add_argument("--input", type=Path, help="Input image path.")
     parser.add_argument("--target", default=200, type=int, help="Approximate equation count.")
@@ -157,9 +198,21 @@ def main() -> None:
             line_thickness=args.line_thickness,
             fit_mode=args.fit_mode,
             cleaned_input=args.cleaned_input,
+            trace_mode=args.trace_mode,
+            preprocess_scale=args.preprocess_scale,
+            render_scale=args.render_scale,
+            max_bridge_gap=args.max_bridge_gap,
+            bridge_angle_threshold=args.bridge_angle_threshold,
+            local_threshold=args.local_threshold,
+            keep_diagnostics=args.keep_diagnostics,
         )
         print(f"Wrote {result.equation_count} line-art equations to {result.out_dir}")
+        print(f"Trace mode: {result.trace_mode}")
         print(f"Traced strokes: {result.stroke_count}")
+        if result.trace_mode == "centerline-v2":
+            print(f"Raw branches: {result.raw_branch_count}")
+            print(f"Accepted bridges: {result.accepted_bridge_count}")
+            print(f"Final chains: {result.final_chain_count}")
         print(f"Preview: {result.function_preview_path}")
         print(f"JSON: {result.json_path}")
         return

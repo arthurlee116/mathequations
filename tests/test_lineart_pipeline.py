@@ -67,6 +67,21 @@ class LineartPipelineTests(unittest.TestCase):
         self.assertEqual(args.target, 80)
         self.assertEqual(args.fit_mode, "mixed")
 
+    def test_run_lineart_pipeline_rejects_unknown_trace_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            image_path = root / "lineart.png"
+            image = np.full((20, 20, 3), 255, dtype=np.uint8)
+            cv2.line(image, (3, 10), (17, 10), (0, 0, 0), thickness=1)
+            cv2.imwrite(str(image_path), image)
+
+            with self.assertRaises(ValueError):
+                run_lineart_pipeline(
+                    image_path=image_path,
+                    out_dir=root / "out",
+                    trace_mode="nope",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
