@@ -303,7 +303,7 @@ def fit_stroke_chains(
                 continue
             segments.append(fit_points_to_segment(next_segment_id, stroke_id, piece, fit_mode=fit_mode))
             next_segment_id += 1
-    return segments[: max(1, round(target * 1.15))]
+    return segments
 
 
 def fit_stroke_paths(

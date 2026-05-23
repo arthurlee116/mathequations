@@ -111,6 +111,17 @@ class CurveFitTests(unittest.TestCase):
         self.assertEqual(len(segments), 1)
         self.assertEqual(segments[0]["type"], "parametric_polyline")
 
+    def test_fit_stroke_chains_target_does_not_drop_whole_chains(self):
+        chains = [
+            StrokeChain(stroke_id=index + 1, points=[(0.0, float(index)), (5.0, float(index))])
+            for index in range(5)
+        ]
+
+        segments = fit_stroke_chains(chains, target=2, fit_mode="mixed")
+
+        self.assertEqual(len(segments), 5)
+        self.assertEqual({segment["stroke_id"] for segment in segments}, {1, 2, 3, 4, 5})
+
 
 if __name__ == "__main__":
     unittest.main()
