@@ -1,3 +1,5 @@
+"""Lucas-specific raster pipeline for layered equation art exports."""
+
 from __future__ import annotations
 
 import json
@@ -28,6 +30,8 @@ from .render import render_filled_regions, render_segments
 
 @dataclass(frozen=True)
 class LucasPipelineResult:
+    """Equation counts produced by one Lucas raster pipeline run."""
+
     out_dir: Path
     total_equations: int
     outline_equations: int
@@ -35,6 +39,7 @@ class LucasPipelineResult:
 
 
 def extract_line_mask(image: np.ndarray) -> np.ndarray:
+    """Isolate dark internal line art from a cleaned Lucas image."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     saturation = hsv[:, :, 1]
@@ -50,6 +55,7 @@ def extract_outline_contours(
     *,
     min_area: float = 50.0,
 ) -> list[np.ndarray]:
+    """Extract the outer silhouette contours from the foreground mask."""
     closed = cv2.morphologyEx(
         foreground_mask,
         cv2.MORPH_CLOSE,
@@ -72,6 +78,7 @@ def extract_internal_line_contours(
     min_component_extent: int = 14,
     foreground_erode_px: int = 21,
 ) -> list[np.ndarray]:
+    """Extract dark details that sit safely inside the foreground silhouette."""
     erode_px = max(1, foreground_erode_px)
     interior = cv2.erode(foreground_mask, np.ones((erode_px, erode_px), np.uint8), iterations=1)
     details = cv2.bitwise_and(line_mask, interior)
@@ -96,6 +103,7 @@ def extract_internal_line_contours(
 
 
 def _smooth_feature_mask(mask: np.ndarray, foreground_mask: np.ndarray) -> np.ndarray:
+    """Turn a rough color-threshold mask into stable, fillable components."""
     mask = cv2.bitwise_and(mask.astype(np.uint8) * 255, foreground_mask)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8), iterations=1)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8), iterations=1)
@@ -111,6 +119,7 @@ def _contours_from_feature_mask(
     limit: int,
     keep_contour: Any | None = None,
 ) -> list[np.ndarray]:
+    """Filter feature-mask contours by area, optional predicate, and limit."""
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     useful: list[np.ndarray] = []
     for contour in contours:
@@ -129,6 +138,7 @@ def extract_feature_contours(
     *,
     foreground_erode_px: int = 35,
 ) -> list[np.ndarray]:
+    """Find prominent colored and dark Lucas features inside the silhouette."""
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     hue, saturation, value = cv2.split(hsv)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -151,6 +161,7 @@ def extract_feature_contours(
     )
 
     def keep_dark_feature(contour: np.ndarray) -> bool:
+        """Reject large shadows while keeping facial details and top accessory."""
         area = cv2.contourArea(contour)
         x, y, _, _ = cv2.boundingRect(contour)
         if area > max(30000.0, width * height * 0.02):
@@ -184,6 +195,7 @@ def quantize_to_gray_regions(
     *,
     levels: int = 6,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Quantize foreground brightness into labels plus representative grays."""
     source_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     smoothed = cv2.bilateralFilter(source_gray, 9, 30, 30)
     foreground_values = smoothed[foreground_mask > 0]
@@ -211,6 +223,7 @@ def quantize_to_gray_regions(
 
 
 def source_grayscale_fill(image: np.ndarray, foreground_mask: np.ndarray) -> np.ndarray:
+    """Return a smoothed grayscale image clipped to the foreground."""
     source_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     smoothed = cv2.bilateralFilter(source_gray, 9, 30, 30)
     result = np.full(foreground_mask.shape, 255, dtype=np.uint8)
@@ -223,6 +236,7 @@ def extract_region_contours(
     *,
     min_area: float = 80.0,
 ) -> dict[int, list[np.ndarray]]:
+    """Return contours for each non-background region label."""
     result: dict[int, list[np.ndarray]] = {}
     for label in sorted(int(v) for v in np.unique(region_mask) if v != 0):
         mask = (region_mask == label).astype(np.uint8) * 255
@@ -234,14 +248,17 @@ def extract_region_contours(
 
 
 def _write_text(path: Path, lines: list[str]) -> None:
+    """Write one text line per item with a final newline."""
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _contour_length(contour: np.ndarray) -> float:
+    """Return contour perimeter using the shared geometry helper."""
     return polyline_length(contour_to_points(contour), closed=True)
 
 
 def _select_contours(contours: list[np.ndarray], target: int, *, min_points: int) -> list[np.ndarray]:
+    """Keep the longest contours that can fit the requested point budget."""
     max_contours = max(1, target // min_points)
     ordered = sorted(contours, key=_contour_length, reverse=True)
     return ordered[:max_contours]
@@ -253,6 +270,7 @@ def _allocate_contour_targets(
     *,
     min_points: int,
 ) -> list[int]:
+    """Allocate point budgets while honoring a per-contour minimum."""
     allocations = allocate_targets(lengths, total_target)
     if not allocations:
         return []
@@ -278,10 +296,12 @@ def _allocate_contour_targets(
 
 
 def _contours_to_target_points(contours: list[np.ndarray], target: int) -> list[list[tuple[float, float]]]:
+    """Convert closed contours to points with the default Lucas simplification."""
     return _contours_to_target_points_with_epsilon(contours, target, epsilon_px=0.5, closed=True)
 
 
 def _simplify_points(contour: np.ndarray, *, epsilon_px: float, closed: bool) -> list[tuple[float, float]]:
+    """Simplify open or closed contours with a caller-chosen tolerance."""
     approx = cv2.approxPolyDP(contour, epsilon_px, closed)
     return contour_to_points(approx)
 
@@ -290,6 +310,7 @@ def _resample_open_points(
     points: list[tuple[float, float]],
     target_count: int,
 ) -> list[tuple[float, float]]:
+    """Redistribute an open contour into equal arc-length samples."""
     if target_count <= 0:
         raise ValueError("target_count must be positive")
     if len(points) <= 1:
@@ -331,6 +352,7 @@ def _contours_to_target_points_with_epsilon(
     min_points: int = 3,
     preserve_detail: bool = False,
 ) -> list[list[tuple[float, float]]]:
+    """Simplify and resample contours against a shared target point budget."""
     if not contours:
         return []
 
@@ -359,6 +381,7 @@ def _contours_to_target_points_with_epsilon(
 
 
 def _line_contours(mask: np.ndarray, *, min_area: float = 6.0) -> list[np.ndarray]:
+    """Find tiny line contours for internal details."""
     contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
     useful = [contour for contour in contours if cv2.contourArea(contour) >= min_area]
     useful.sort(key=_contour_length, reverse=True)
@@ -382,6 +405,7 @@ def _segments_from_contours(
     min_points: int = 3,
     preserve_detail: bool = False,
 ) -> list[dict[str, Any]]:
+    """Convert contours into equation segment dictionaries for one layer."""
     pixel_contours = _contours_to_target_points_with_epsilon(
         contours,
         target,
@@ -423,6 +447,7 @@ def _segments_from_contours(
 
 
 def _label_to_gray(gray_image: np.ndarray, region_mask: np.ndarray) -> dict[int, int]:
+    """Map each quantized region label to its median source gray value."""
     result: dict[int, int] = {}
     for label in sorted(int(v) for v in np.unique(region_mask) if v != 0):
         values = gray_image[region_mask == label]
@@ -438,6 +463,7 @@ def _region_payload(
     scale: float,
     gray_levels: int,
 ) -> dict[str, Any]:
+    """Build the structured JSON payload for fill-region metadata."""
     width, height = image_size
     return {
         "metadata": {
@@ -460,6 +486,7 @@ def _region_payload(
 
 
 def _desmos_latex_from_segment(segment: dict[str, Any]) -> str:
+    """Format one segment dictionary as Desmos-compatible LaTeX."""
     if segment["type"] == "vertical":
         c = format_number(float(segment["c"]))
         y_min = format_number(float(segment["restriction"]["min"]))
@@ -476,6 +503,7 @@ def _desmos_latex_from_segment(segment: dict[str, Any]) -> str:
 
 
 def _write_desmos_exports(out_dir: Path, segments: list[dict[str, Any]]) -> None:
+    """Write JSON, text, and HTML files for opening the equations in Desmos."""
     expressions = [
         {
             "id": f"lucas_{index}",
@@ -552,6 +580,7 @@ def run_lucas_pipeline(
     gray_levels: int = 6,
     scale_width: float = 20.0,
 ) -> LucasPipelineResult:
+    """Run the Lucas raster pipeline and write equation, JSON, and preview files."""
     if outline_target < 3:
         raise ValueError("outline_target must be at least 3")
     if region_target < 3:

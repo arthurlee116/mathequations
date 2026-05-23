@@ -1,3 +1,5 @@
+"""Small data model for vector artwork and SVG path generation."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,6 +9,7 @@ Point = tuple[float, float]
 
 
 def _format_svg_number(value: float) -> str:
+    """Keep SVG coordinates readable without losing useful precision."""
     rounded = round(float(value), 3)
     if rounded == 0:
         rounded = 0.0
@@ -14,6 +17,7 @@ def _format_svg_number(value: float) -> str:
 
 
 def svg_path_from_points(points: list[Point], *, closed: bool = True) -> str:
+    """Serialize points as a minimal SVG path."""
     if not points:
         return ""
 
@@ -28,6 +32,8 @@ def svg_path_from_points(points: list[Point], *, closed: bool = True) -> str:
 
 @dataclass(frozen=True)
 class VectorShape:
+    """A named drawable shape, optionally filled, stroked, and layered."""
+
     shape_id: str
     contours: list[list[Point]]
     fill: str | None
@@ -38,6 +44,7 @@ class VectorShape:
     label: str | None = None
 
     def path_data(self) -> str:
+        """Join every contour in the shape into one SVG path string."""
         return " ".join(
             svg_path_from_points(contour, closed=self.closed)
             for contour in self.contours
@@ -47,9 +54,12 @@ class VectorShape:
 
 @dataclass(frozen=True)
 class VectorArtwork:
+    """A complete vector drawing in image pixel coordinates."""
+
     width: int
     height: int
     shapes: list[VectorShape]
 
     def ordered_shapes(self) -> list[VectorShape]:
+        """Return shapes in paint order."""
         return sorted(self.shapes, key=lambda shape: shape.z_index)

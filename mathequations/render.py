@@ -1,3 +1,5 @@
+"""Raster preview rendering for equation segments and filled regions."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,6 +16,7 @@ def _cartesian_to_pixel(
     height: int,
     scale: float,
 ) -> tuple[int, int]:
+    """Map a Cartesian segment endpoint back into image pixels."""
     u = point["x"] / scale + width / 2
     v = height / 2 - point["y"] / scale
     return (int(round(u)), int(round(v)))
@@ -28,6 +31,7 @@ def render_segments(
     line_color: tuple[int, int, int] = (0, 0, 0),
     line_thickness: int = 2,
 ) -> None:
+    """Render bounded line-equation segments onto a white preview image."""
     width, height = image_size
     canvas = np.full((height, width, 3), 255, dtype=np.uint8)
     for segment in segments:
@@ -47,6 +51,7 @@ def render_filled_regions(
     scale: float,
     base_gray_image: np.ndarray | None = None,
 ) -> None:
+    """Render grayscale fill regions, then draw line segments on top."""
     width, height = image_size
     if base_gray_image is None:
         canvas = np.full((height, width, 3), 255, dtype=np.uint8)

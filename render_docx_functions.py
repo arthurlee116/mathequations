@@ -1,3 +1,5 @@
+"""Render colored Desmos function tables from a DOCX back into an image."""
+
 from __future__ import annotations
 
 import argparse
@@ -27,6 +29,8 @@ Point = tuple[float, float]
 
 @dataclass
 class Segment:
+    """One parsed restricted line segment from the DOCX table."""
+
     group: int
     color: str
     start: Point
@@ -34,10 +38,12 @@ class Segment:
 
 
 def _close(a: Point, b: Point, tolerance: float = 1e-3) -> bool:
+    """Return whether two points should be treated as connected."""
     return abs(a[0] - b[0]) <= tolerance and abs(a[1] - b[1]) <= tolerance
 
 
 def _parse_function_text(text: str, color: str, group: int) -> Segment | None:
+    """Parse one linear or vertical restricted equation into endpoints."""
     linear = LINEAR_RE.search(text)
     if linear:
         m = float(linear.group(1))
@@ -58,6 +64,7 @@ def _parse_function_text(text: str, color: str, group: int) -> Segment | None:
 
 
 def _colors_from_doc(document: Document) -> list[str]:
+    """Collect table colors from the Chinese color markers in the document."""
     colors: list[str] = []
     for paragraph in document.paragraphs:
         match = COLOR_RE.search(paragraph.text)
@@ -67,6 +74,7 @@ def _colors_from_doc(document: Document) -> list[str]:
 
 
 def _segments_from_docx(docx_path: Path) -> list[Segment]:
+    """Read every supported function row from the DOCX tables."""
     document = Document(docx_path)
     colors = _colors_from_doc(document)
     segments: list[Segment] = []
@@ -83,6 +91,7 @@ def _segments_from_docx(docx_path: Path) -> list[Segment]:
 
 
 def _contours_from_segments(segments: list[Segment]) -> list[tuple[str, list[Point]]]:
+    """Reconnect adjacent segments into fillable polygon contours."""
     contours: list[tuple[str, list[Point]]] = []
 
     group_order: list[int] = []
@@ -115,10 +124,12 @@ def _contours_from_segments(segments: list[Segment]) -> list[tuple[str, list[Poi
 
 
 def _hex_to_rgb(color: str) -> tuple[int, int, int]:
+    """Convert ``#RRGGBB`` colors to Pillow's RGB channel order."""
     return (int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16))
 
 
 def _pixel_mapper(contours: list[tuple[str, list[Point]]], width: int, height: int, padding: int):
+    """Build a coordinate-to-pixel mapper that preserves aspect ratio."""
     xs = [x for _, points in contours for x, _ in points]
     ys = [y for _, points in contours for _, y in points]
     if not xs or not ys:
@@ -149,6 +160,7 @@ def render_docx_to_image(
     height: int = 1390,
     padding: int = 24,
 ) -> None:
+    """Render closed DOCX function contours as filled polygons."""
     segments = _segments_from_docx(Path(docx_path))
     contours = _contours_from_segments(segments)
     to_pixel = _pixel_mapper(contours, width, height, padding)
@@ -162,6 +174,7 @@ def render_docx_to_image(
 
 
 def main() -> None:
+    """Parse CLI arguments and render the requested DOCX."""
     parser = argparse.ArgumentParser(description="Render a Lucas function DOCX into a PNG image.")
     parser.add_argument("docx", type=Path, help="Input DOCX function list.")
     parser.add_argument("output", type=Path, help="Output PNG path.")

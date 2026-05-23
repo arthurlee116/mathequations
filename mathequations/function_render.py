@@ -1,3 +1,5 @@
+"""Render filled shapes from the JSON segment payload exported for functions."""
+
 from __future__ import annotations
 
 import json
@@ -10,6 +12,7 @@ import numpy as np
 
 
 def _hex_to_bgr(color: str) -> tuple[int, int, int]:
+    """Convert ``#RRGGBB`` colors to OpenCV's BGR channel order."""
     if len(color) != 7 or not color.startswith("#"):
         raise ValueError(f"Expected #RRGGBB color, got {color!r}")
     red = int(color[1:3], 16)
@@ -25,12 +28,14 @@ def _cartesian_to_pixel(
     height: int,
     scale: float,
 ) -> tuple[int, int]:
+    """Map a Cartesian segment endpoint back into image pixels."""
     u = point["x"] / scale + width / 2
     v = height / 2 - point["y"] / scale
     return (int(round(u)), int(round(v)))
 
 
 def _shape_order(payload: dict[str, Any]) -> list[str]:
+    """Return shape IDs sorted by their exported z-index."""
     shapes = payload.get("shapes", [])
     ordered = sorted(
         shapes,
@@ -40,6 +45,7 @@ def _shape_order(payload: dict[str, Any]) -> list[str]:
 
 
 def _shape_fill_map(payload: dict[str, Any]) -> dict[str, str]:
+    """Map each exported shape ID to its fill color."""
     result: dict[str, str] = {}
     for shape in payload.get("shapes", []):
         shape_id = shape.get("shape_id")
@@ -50,6 +56,7 @@ def _shape_fill_map(payload: dict[str, Any]) -> dict[str, str]:
 
 
 def render_function_segments_payload(payload: dict[str, Any], path: Path) -> None:
+    """Fill reconstructed contours from the segment JSON payload."""
     metadata = payload["metadata"]
     width = int(metadata["image_width"])
     height = int(metadata["image_height"])
@@ -90,5 +97,6 @@ def render_function_segments_payload(payload: dict[str, Any], path: Path) -> Non
 
 
 def render_function_segments_file(payload_path: Path, output_path: Path) -> None:
+    """Render a segment JSON file directly to an image."""
     payload = json.loads(Path(payload_path).read_text(encoding="utf-8"))
     render_function_segments_payload(payload, output_path)

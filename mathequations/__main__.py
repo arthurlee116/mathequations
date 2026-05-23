@@ -1,3 +1,5 @@
+"""Command-line entry point for the image-to-equation pipelines."""
+
 from __future__ import annotations
 
 import argparse
@@ -9,6 +11,7 @@ from .pipeline import run_pipeline
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser shared by generic and Lucas-specific pipelines."""
     parser = argparse.ArgumentParser(
         description="Convert a clean emblem image into restricted linear equations."
     )
@@ -77,6 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """Parse CLI arguments and dispatch to the requested pipeline."""
     args = build_parser().parse_args()
     if args.command == "lucas":
         result = run_lucas_pipeline(

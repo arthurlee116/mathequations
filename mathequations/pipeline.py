@@ -1,3 +1,5 @@
+"""Generic image-to-equation pipeline for simple foreground artwork."""
+
 from __future__ import annotations
 
 import json
@@ -26,6 +28,8 @@ from .render import render_segments
 
 @dataclass(frozen=True)
 class PipelineResult:
+    """Paths and counts produced by one generic pipeline run."""
+
     out_dir: Path
     segment_count: int
     mask_path: Path
@@ -36,6 +40,7 @@ class PipelineResult:
 
 
 def _contours_to_target_points(contours, target: int) -> list[list[tuple[float, float]]]:
+    """Simplify or resample contours to stay near the requested point budget."""
     simplified = [simplify_contour(contour) for contour in contours]
     lengths = [polyline_length(points, closed=True) for points in simplified]
     allocations = allocate_targets(lengths, target)
@@ -54,6 +59,7 @@ def _contours_to_target_points(contours, target: int) -> list[list[tuple[float, 
 
 
 def _write_text(path: Path, lines: list[str]) -> None:
+    """Write one text line per item with a final newline."""
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -65,6 +71,7 @@ def run_pipeline(
     scale_width: float = 20.0,
     saturation_threshold: int = 40,
 ) -> PipelineResult:
+    """Run the generic conversion and write masks, previews, equations, and JSON."""
     if target < 3:
         raise ValueError("target must be at least 3")
     out_dir = Path(out_dir)

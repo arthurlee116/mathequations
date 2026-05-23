@@ -1,3 +1,5 @@
+"""Image loading and foreground extraction utilities."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,6 +10,7 @@ from PIL import Image
 
 
 def load_image(path: Path) -> np.ndarray:
+    """Load an image as an OpenCV BGR array, falling back to Pillow formats."""
     path = Path(path)
     image = cv2.imread(str(path), cv2.IMREAD_COLOR)
     if image is not None:
@@ -19,6 +22,7 @@ def load_image(path: Path) -> np.ndarray:
 
 
 def normalize_white_background(image: np.ndarray, *, white_threshold: int = 245) -> np.ndarray:
+    """Snap near-white pixels to pure white before segmentation."""
     result = image.copy()
     gray = cv2.cvtColor(result, cv2.COLOR_BGR2GRAY)
     result[gray >= white_threshold] = [255, 255, 255]
@@ -30,6 +34,7 @@ def foreground_mask(
     *,
     saturation_threshold: int = 40,
 ) -> np.ndarray:
+    """Build a binary mask for colored or non-white foreground pixels."""
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     saturation_mask = (hsv[:, :, 1] > saturation_threshold).astype(np.uint8) * 255
 
@@ -44,6 +49,7 @@ def foreground_mask(
 
 
 def find_foreground_contours(mask: np.ndarray, *, min_area: float = 50.0) -> list[np.ndarray]:
+    """Return foreground contours sorted from largest to smallest area."""
     contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     useful = [contour for contour in contours if cv2.contourArea(contour) >= min_area]
     useful.sort(key=cv2.contourArea, reverse=True)
@@ -51,6 +57,7 @@ def find_foreground_contours(mask: np.ndarray, *, min_area: float = 50.0) -> lis
 
 
 def foreground_bbox(mask: np.ndarray) -> tuple[int, int, int, int]:
+    """Return the inclusive bounding box around all nonzero mask pixels."""
     ys, xs = np.where(mask > 0)
     if len(xs) == 0 or len(ys) == 0:
         raise ValueError("No foreground pixels found in mask")

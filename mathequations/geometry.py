@@ -1,3 +1,5 @@
+"""Geometry helpers for turning image contours into graph coordinates."""
+
 from __future__ import annotations
 
 import math
@@ -10,6 +12,7 @@ Point = tuple[float, float]
 
 
 def contour_to_points(contour: np.ndarray) -> list[Point]:
+    """Flatten an OpenCV contour into plain ``(x, y)`` pixel points."""
     return [(float(point[0][0]), float(point[0][1])) for point in contour]
 
 
@@ -20,6 +23,7 @@ def pixel_to_cartesian(
     height: int,
     scale: float,
 ) -> Point:
+    """Map image pixels into a Cartesian plane centered on the image."""
     u, v = point
     x = (u - width / 2) * scale
     y = (height / 2 - v) * scale
@@ -27,11 +31,13 @@ def pixel_to_cartesian(
 
 
 def simplify_contour(contour: np.ndarray, epsilon_px: float = 0.5) -> list[Point]:
+    """Simplify a closed contour with OpenCV's Douglas-Peucker algorithm."""
     approx = cv2.approxPolyDP(contour, epsilon_px, True)
     return contour_to_points(approx)
 
 
 def polyline_length(points: list[Point], *, closed: bool = True) -> float:
+    """Return the perimeter or open-path length of a point sequence."""
     if len(points) < 2:
         return 0.0
     total = 0.0
@@ -44,6 +50,7 @@ def polyline_length(points: list[Point], *, closed: bool = True) -> float:
 
 
 def resample_closed_points(points: list[Point], target_count: int) -> list[Point]:
+    """Redistribute a closed contour into roughly equal arc-length steps."""
     if target_count <= 0:
         raise ValueError("target_count must be positive")
     if len(points) <= 1:
@@ -82,6 +89,7 @@ def resample_closed_points(points: list[Point], target_count: int) -> list[Point
 
 
 def allocate_targets(lengths: list[float], total_target: int) -> list[int]:
+    """Split a total point budget proportionally across contour lengths."""
     if not lengths:
         return []
     total_length = sum(lengths)
@@ -110,6 +118,7 @@ def map_contours_to_cartesian(
     height: int,
     scale: float,
 ) -> list[list[Point]]:
+    """Map multiple pixel-space contours into Cartesian-space contours."""
     return [
         [pixel_to_cartesian(point, width=width, height=height, scale=scale) for point in contour]
         for contour in contours

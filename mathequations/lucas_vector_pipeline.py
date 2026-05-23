@@ -1,3 +1,5 @@
+"""Lucas-specific vector reconstruction before equation export."""
+
 from __future__ import annotations
 
 import json
@@ -18,12 +20,15 @@ from .vector_render import render_vector_artwork, write_svg
 
 @dataclass(frozen=True)
 class LucasVectorPipelineResult:
+    """Shape and segment counts produced by one vector pipeline run."""
+
     out_dir: Path
     shape_count: int
     segment_count: int
 
 
 def _clean_mask(mask: np.ndarray, *, close_px: int = 5, open_px: int = 3) -> np.ndarray:
+    """Normalize a mask to 0/255 and clean small gaps or speckles."""
     result = mask.astype(np.uint8)
     if result.max() <= 1:
         result = result * 255
@@ -45,6 +50,7 @@ def _clean_mask(mask: np.ndarray, *, close_px: int = 5, open_px: int = 3) -> np.
 
 
 def _external_filled_mask(mask: np.ndarray) -> np.ndarray:
+    """Fill the outer silhouette of a mask while discarding internal holes."""
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     filled = np.zeros_like(mask)
     cv2.drawContours(filled, contours, -1, 255, thickness=-1)
@@ -52,6 +58,7 @@ def _external_filled_mask(mask: np.ndarray) -> np.ndarray:
 
 
 def _contour_points(contour: np.ndarray, *, epsilon_px: float) -> list[Point]:
+    """Simplify one contour into vector points."""
     approx = cv2.approxPolyDP(contour, epsilon_px, True)
     return [(float(point[0][0]), float(point[0][1])) for point in approx]
 
@@ -67,6 +74,7 @@ def _shape_from_mask(
     stroke: str | None = None,
     stroke_width: float = 0,
 ) -> VectorShape | None:
+    """Create one vector shape from the usable contours in a binary mask."""
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     useful = [
         contour
@@ -100,6 +108,7 @@ def _superellipse_points(
     exponent: float = 3.2,
     point_count: int = 72,
 ) -> list[Point]:
+    """Return rounded-rectangle-like points for stylized eye regions."""
     points: list[Point] = []
     for theta in np.linspace(0, 2 * np.pi, point_count, endpoint=False):
         cos_value = float(np.cos(theta))
@@ -116,6 +125,7 @@ def _split_purple_eye_shape(
     width: int,
     height: int,
 ) -> tuple[VectorShape | None, np.ndarray]:
+    """Pull purple eye regions out of the broader purple mask."""
     contours, _ = cv2.findContours(purple_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     candidates: list[tuple[float, tuple[int, int, int, int], np.ndarray]] = []
     image_area = float(width * height)
@@ -142,6 +152,8 @@ def _split_purple_eye_shape(
         ]
         if not spanning:
             return None, purple_mask
+        # Some inputs merge both purple eyes into one blob; split that blob by
+        # fitting two synthetic eye contours instead of trusting the mask edge.
         area, (x, y, box_width, box_height), contour = max(spanning, key=lambda candidate: candidate[0])
         center_y = y + box_height / 2
         radius_x = box_width * 0.22
@@ -197,12 +209,14 @@ def _split_purple_eye_shape(
 
 
 def _bbox_from_points(points: list[Point]) -> tuple[float, float, float, float]:
+    """Return the bounding box around a point list."""
     xs = [point[0] for point in points]
     ys = [point[1] for point in points]
     return min(xs), min(ys), max(xs), max(ys)
 
 
 def _eye_lid_points(eye_contour: list[Point]) -> list[Point]:
+    """Build a black lower-lid contour inside one purple eye contour."""
     x_min, y_min, x_max, y_max = _bbox_from_points(eye_contour)
     width = x_max - x_min
     height = y_max - y_min
@@ -219,6 +233,7 @@ def _eye_lid_points(eye_contour: list[Point]) -> list[Point]:
 
 
 def _black_eye_lids_from_eyes(eye_shape: VectorShape | None) -> VectorShape | None:
+    """Create eyelid shapes only when exactly two purple eyes were found."""
     if eye_shape is None:
         return None
     contours = [_eye_lid_points(contour) for contour in eye_shape.contours]
@@ -235,6 +250,7 @@ def _black_eye_lids_from_eyes(eye_shape: VectorShape | None) -> VectorShape | No
 
 
 def _mask_without_shape(mask: np.ndarray, shape: VectorShape | None, *, dilate_px: int) -> np.ndarray:
+    """Remove a known shape from a mask before extracting overlapping details."""
     if shape is None:
         return mask
     removal = np.zeros_like(mask)
@@ -252,12 +268,14 @@ def _mask_without_shape(mask: np.ndarray, shape: VectorShape | None, *, dilate_p
 
 
 def _mask_where(condition: np.ndarray, scope: np.ndarray, *, close_px: int, open_px: int) -> np.ndarray:
+    """Apply a boolean color condition inside a mask scope, then clean it."""
     mask = np.zeros(scope.shape, dtype=np.uint8)
     mask[(condition) & (scope > 0)] = 255
     return _clean_mask(mask, close_px=close_px, open_px=open_px)
 
 
 def build_lucas_vector_artwork(image: np.ndarray) -> VectorArtwork:
+    """Reconstruct Lucas as named, layered vector shapes from the source image."""
     clean = normalize_white_background(image)
     height, width = clean.shape[:2]
     foreground = _clean_mask(foreground_mask(clean), close_px=7, open_px=3)
@@ -274,6 +292,9 @@ def build_lucas_vector_artwork(image: np.ndarray) -> VectorArtwork:
     image_area = float(width * height)
     min_large = max(80.0, image_area * 0.0006)
     min_small = max(20.0, image_area * 0.00012)
+    # The masks below are intentionally semantic: each threshold tries to
+    # recover one visible character material or detail, then z-index handles
+    # the paint order.
     purple_mask = _mask_where(
         (hue >= 112) & (hue <= 158) & (saturation >= 35) & (value >= 65),
         upper_character,
@@ -421,6 +442,7 @@ def build_lucas_vector_artwork(image: np.ndarray) -> VectorArtwork:
 
 
 def _artwork_bbox(artwork: VectorArtwork) -> tuple[int, int, int, int]:
+    """Return the bounding box around every point in the artwork."""
     xs: list[float] = []
     ys: list[float] = []
     for shape in artwork.shapes:
@@ -433,6 +455,7 @@ def _artwork_bbox(artwork: VectorArtwork) -> tuple[int, int, int, int]:
 
 
 def _desmos_latex_from_segment(segment: dict[str, Any]) -> str:
+    """Format one segment dictionary as Desmos-compatible LaTeX."""
     if segment["type"] == "vertical":
         c = format_number(float(segment["c"]))
         y_min = format_number(float(segment["restriction"]["min"]))
@@ -453,6 +476,7 @@ def _segments_from_artwork(
     *,
     scale_width: float,
 ) -> tuple[list[dict[str, Any]], float]:
+    """Convert vector contours to restricted equations plus their scale."""
     x_min, _, x_max, _ = _artwork_bbox(artwork)
     scale = scale_width / max(1, x_max - x_min + 1)
     segments: list[dict[str, Any]] = []
@@ -482,6 +506,7 @@ def _write_desmos_vector_exports(
     out_dir: Path,
     segments: list[dict[str, Any]],
 ) -> None:
+    """Write Desmos-ready JSON and text exports for vector segments."""
     expressions = [
         {
             "id": f"lucas_vector_{index}",
@@ -511,6 +536,7 @@ def run_lucas_vector_pipeline(
     out_dir: Path,
     scale_width: float = 20.0,
 ) -> LucasVectorPipelineResult:
+    """Run vector reconstruction and write SVG, previews, JSON, and equations."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 

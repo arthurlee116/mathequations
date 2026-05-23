@@ -1,9 +1,12 @@
+"""Format contour line segments as Desmos-friendly restricted equations."""
+
 from __future__ import annotations
 
 from typing import Any
 
 
 def format_number(value: float, places: int = 6) -> str:
+    """Format floats compactly while avoiding negative zero in output."""
     rounded = round(value, places)
     if rounded == 0:
         rounded = 0.0
@@ -18,6 +21,7 @@ def equation_from_segment(
     *,
     vertical_tolerance: float = 1e-9,
 ) -> dict[str, Any]:
+    """Describe one bounded line segment as a linear or vertical equation."""
     x1, y1 = start
     x2, y2 = end
     base = {
@@ -63,6 +67,7 @@ def equation_from_segment(
 def equations_from_contours(
     contours: list[list[tuple[float, float]]],
 ) -> list[dict[str, Any]]:
+    """Convert each contour edge into a restricted linear equation segment."""
     segments: list[dict[str, Any]] = []
     segment_id = 1
     for contour_id, points in enumerate(contours):
@@ -84,6 +89,7 @@ def segments_to_jsonable(
     scale: float,
     target: int,
 ) -> dict[str, Any]:
+    """Wrap generated segments with the metadata needed by render/export code."""
     width, height = image_size
     return {
         "metadata": {
