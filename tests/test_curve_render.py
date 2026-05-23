@@ -5,8 +5,17 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from mathequations.curve_equations import bezier_cubic_segment, linear_segment, quadratic_segment
-from mathequations.curve_render import render_curve_segments, sample_segment_points
+from mathequations.curve_equations import (
+    bezier_cubic_segment,
+    linear_segment,
+    parametric_polyline_segment,
+    quadratic_segment,
+)
+from mathequations.curve_render import (
+    render_curve_segment_previews,
+    render_curve_segments,
+    sample_segment_points,
+)
 
 
 class CurveRenderTests(unittest.TestCase):
@@ -27,11 +36,12 @@ class CurveRenderTests(unittest.TestCase):
                 control_points=((0.0, 0.0), (1.0, 2.0), (2.0, 2.0), (3.0, 0.0)),
                 fit_error=0.0,
             ),
+            parametric_polyline_segment(4, 3, [(-2.0, -2.0), (0.0, 2.0), (2.0, -1.0)]),
         ]
 
         counts = [len(sample_segment_points(segment, samples=24)) for segment in segments]
 
-        self.assertEqual(counts, [24, 24, 24])
+        self.assertEqual(counts, [24, 24, 24, 24])
 
     def test_render_curve_segments_writes_nonblank_preview(self):
         segments = [
@@ -51,6 +61,25 @@ class CurveRenderTests(unittest.TestCase):
 
         self.assertIsNotNone(image)
         self.assertLess(int(np.min(image)), 250)
+
+    def test_render_curve_segment_previews_writes_highres_and_downsampled(self):
+        segments = [linear_segment(1, 1, (-5.0, 0.0), (5.0, 0.0))]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            paths = render_curve_segment_previews(
+                segments,
+                out_dir,
+                image_size=(60, 40),
+                scale=5.0,
+                render_scale=4,
+            )
+            preview = cv2.imread(str(paths["preview"]), cv2.IMREAD_GRAYSCALE)
+            highres = cv2.imread(str(paths["highres"]), cv2.IMREAD_GRAYSCALE)
+
+        self.assertEqual(preview.shape, (40, 60))
+        self.assertEqual(highres.shape, (160, 240))
+        self.assertLess(int(np.min(preview)), 250)
 
 
 if __name__ == "__main__":
