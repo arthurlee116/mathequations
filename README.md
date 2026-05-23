@@ -196,6 +196,36 @@ Extra V2 outputs include:
 
 Higher `--target` does not fix broken stroke reconstruction. If output is dashed, inspect the V2 diagnostics and tune thresholding or bridge parameters.
 
+## Thick Lineart Pipeline
+
+Use this for koala-style colored line art where stroke thickness must be represented by real Desmos expressions instead of only display line width.
+
+```bash
+python -m mathequations thick-lineart \
+  --input path/to/koala.jpeg \
+  --out output/koala_thick \
+  --target 1800 \
+  --offset-step 1 \
+  --max-offsets 9 \
+  --keep-diagnostics
+```
+
+This path extracts required black, yellow, and pink masks, traces centerlines, estimates stroke radius from each mask, and emits stacked offset expressions. `--offset-step` is measured in source-image pixels, then converted into Cartesian distance with the export scale. `--max-offsets` is the total odd stack count per source segment, including the centerline `offset_index=0`.
+
+Outputs include:
+
+- `black_mask.png`, `yellow_mask.png`, `pink_mask.png`
+- `black_skeleton.png`, `yellow_skeleton.png`, `pink_skeleton.png`
+- `stroke_width_diagnostics.json`
+- `function_preview.png`
+- `function_preview_highres.png`
+- `stacked_preview.png`
+- `segments.json`
+- `equations.txt`
+- `desmos_latex.txt`
+- `desmos_expressions.json`
+- `desmos.html`
+
 ## Tests
 
 ```bash
