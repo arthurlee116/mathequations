@@ -2,7 +2,8 @@ import math
 import unittest
 import warnings
 
-from mathequations.curve_fit import fit_points_to_segment, fit_stroke_paths
+from mathequations.centerline_graph import StrokeChain
+from mathequations.curve_fit import fit_points_to_segment, fit_stroke_chains, fit_stroke_paths
 from mathequations.skeleton_graph import StrokePath
 
 
@@ -69,6 +70,46 @@ class CurveFitTests(unittest.TestCase):
         self.assertGreater(len(segments), 1)
         self.assertLessEqual(len(segments), 14)
         self.assertEqual(segments[0]["stroke_id"], 1)
+
+    def test_fit_stroke_chains_keeps_smooth_arc_as_one_cubic(self):
+        points = []
+        for index in range(28):
+            theta = math.pi * index / 27
+            points.append((math.cos(theta), math.sin(theta)))
+        chain = StrokeChain(stroke_id=1, points=points)
+
+        segments = fit_stroke_chains([chain], target=8, fit_mode="mixed")
+
+        self.assertLessEqual(len(segments), 2)
+        self.assertEqual(segments[0]["type"], "bezier_cubic")
+
+    def test_fit_stroke_chains_keeps_straight_chain_linear(self):
+        chain = StrokeChain(stroke_id=2, points=[(float(x), 3.0) for x in range(20)])
+
+        segments = fit_stroke_chains([chain], target=8, fit_mode="mixed")
+
+        self.assertEqual(len(segments), 1)
+        self.assertEqual(segments[0]["type"], "linear")
+
+    def test_fit_stroke_chains_splits_at_real_corner(self):
+        points = [(float(x), 0.0) for x in range(12)]
+        points.extend([(11.0, float(y)) for y in range(1, 12)])
+        chain = StrokeChain(stroke_id=3, points=points)
+
+        segments = fit_stroke_chains([chain], target=8, fit_mode="mixed")
+
+        self.assertGreaterEqual(len(segments), 2)
+        self.assertIn(segments[0]["type"], {"linear", "vertical"})
+        self.assertIn(segments[1]["type"], {"linear", "vertical"})
+
+    def test_fit_stroke_chains_uses_parametric_polyline_fallback_for_zigzag(self):
+        points = [(float(x), float((x % 2) * 4)) for x in range(18)]
+        chain = StrokeChain(stroke_id=4, points=points)
+
+        segments = fit_stroke_chains([chain], target=4, fit_mode="mixed")
+
+        self.assertEqual(len(segments), 1)
+        self.assertEqual(segments[0]["type"], "parametric_polyline")
 
 
 if __name__ == "__main__":

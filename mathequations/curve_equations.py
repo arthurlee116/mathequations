@@ -160,6 +160,61 @@ def bezier_cubic_segment(
     }
 
 
+def _piecewise_latex(expressions: list[str]) -> str:
+    return "\\left\\{" + ",".join(expressions) + "\\right\\}"
+
+
+def parametric_polyline_segment(
+    segment_id: int,
+    stroke_id: int,
+    points: list[Point],
+    *,
+    fit_error: float = 0.0,
+    source_points: list[Point] | None = None,
+) -> dict[str, Any]:
+    """Return a Desmos-style piecewise parametric polyline segment."""
+    if len(points) < 2:
+        raise ValueError("at least two points are required")
+    x_pieces: list[str] = []
+    y_pieces: list[str] = []
+    equation_pieces: list[str] = []
+    for index, (start, end) in enumerate(zip(points, points[1:])):
+        x0, y0 = start
+        x1, y1 = end
+        t0 = float(index)
+        t1 = float(index + 1)
+        dx = x1 - x0
+        dy = y1 - y0
+        x_expr = f"{format_number(x0)}+({format_number(dx)})(t-{format_number(t0)})"
+        y_expr = f"{format_number(y0)}+({format_number(dy)})(t-{format_number(t0)})"
+        condition = f"{format_number(t0)}\\le t\\le {format_number(t1)}"
+        x_pieces.append(f"{condition}:{x_expr}")
+        y_pieces.append(f"{condition}:{y_expr}")
+        equation_pieces.append(
+            f"{format_number(t0)} <= t <= {format_number(t1)}: ({x_expr}, {y_expr})"
+        )
+    t_max = float(len(points) - 1)
+    latex = (
+        f"({_piecewise_latex(x_pieces)},{_piecewise_latex(y_pieces)})"
+        f"\\left\\{{0\\le t\\le {format_number(t_max)}\\right\\}}"
+    )
+    start = points[0]
+    end = points[-1]
+    return {
+        "segment_id": segment_id,
+        "stroke_id": stroke_id,
+        "type": "parametric_polyline",
+        "start": _point_payload(start),
+        "end": _point_payload(end),
+        "points": [_point_payload(point) for point in points],
+        "restriction": {"variable": "t", "min": 0.0, "max": t_max},
+        "equation": "parametric polyline; " + "; ".join(equation_pieces),
+        "latex": latex,
+        "source_points": [_point_payload(point) for point in source_points or points],
+        "fit_error": fit_error,
+    }
+
+
 def segments_payload(
     segments: list[dict[str, Any]],
     *,

@@ -4,6 +4,7 @@ import unittest
 from mathequations.curve_equations import (
     bezier_cubic_segment,
     linear_segment,
+    parametric_polyline_segment,
     quadratic_segment,
     segments_payload,
     vertical_segment,
@@ -46,6 +47,18 @@ class CurveEquationTests(unittest.TestCase):
         self.assertIn("0\\le t\\le 1", segment["latex"])
         self.assertIn("x(t)", segment["equation"])
         self.assertIn("y(t)", segment["equation"])
+
+    def test_parametric_polyline_segment_formats_required_payload(self):
+        points = [(0.0, 0.0), (1.0, 2.0), (3.0, 1.0)]
+
+        segment = parametric_polyline_segment(7, 9, points, fit_error=0.4)
+
+        self.assertEqual(segment["segment_id"], 7)
+        self.assertEqual(segment["stroke_id"], 9)
+        self.assertEqual(segment["type"], "parametric_polyline")
+        self.assertIn("0\\le t\\le 2", segment["latex"])
+        self.assertEqual(segment["restriction"]["variable"], "t")
+        self.assertEqual(len(segment["source_points"]), 3)
 
     def test_segments_payload_is_json_serializable(self):
         segment = linear_segment(1, 1, (0.0, 0.0), (1.0, 1.0))
