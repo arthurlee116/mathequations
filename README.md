@@ -35,13 +35,12 @@ Generated files go under `output/` and are intentionally ignored by Git.
 
 ## Setup
 
-This repo currently has no package metadata file, so install the few runtime
-pieces directly:
+Install the runtime and test dependencies from `requirements.txt`:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install opencv-python numpy pytest
+pip install -r requirements.txt
 ```
 
 ## Generic Pipeline
@@ -134,6 +133,32 @@ It writes:
 This is the better path when the goal is a readable, layered Lucas asset rather
 than a raw high-equation trace. It is less "scan every contour and pray" and
 more "recover the character as shapes, then graph the shapes."
+
+## Lineart Pipeline
+
+Use this for pencil sketches, anime line art, and other drawings where the visible object is made of strokes rather than filled regions.
+
+```bash
+python -m mathequations lineart \
+  --input path/to/sketch.jpeg \
+  --out output/nan_lineart_1200 \
+  --target 1200 \
+  --fit-mode mixed
+```
+
+This pipeline extracts faint lines, skeletonizes them into stroke centerlines, traces open paths, fits a mix of straight, quadratic, and parametric cubic Bezier equations, and writes:
+
+- `line_mask.png`
+- `skeleton.png`
+- `stroke_preview.png`
+- `function_preview.png`
+- `equations.txt`
+- `desmos_latex.txt`
+- `desmos_expressions.json`
+- `segments.json`
+- `selected_equations.txt`
+
+Parameter equations are intentional here. They preserve hair, eyes, fingers, and ornament curves much better than forcing every stroke into `y = f(x)`.
 
 ## Tests
 

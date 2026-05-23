@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .lineart_pipeline import run_lineart_pipeline
 from .lucas_pipeline import run_lucas_pipeline
 from .lucas_vector_pipeline import run_lucas_vector_pipeline
 from .pipeline import run_pipeline
@@ -61,6 +62,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="Coordinate-plane width for the vector artwork foreground.",
     )
 
+    lineart = subparsers.add_parser(
+        "lineart",
+        help="Convert pencil or black-line artwork into mixed line and parametric equations.",
+    )
+    lineart.add_argument("--input", required=True, type=Path, help="Input image path.")
+    lineart.add_argument("--out", required=True, type=Path, help="Output directory.")
+    lineart.add_argument(
+        "--target",
+        default=1200,
+        type=int,
+        help="Approximate equation or curve segment count.",
+    )
+    lineart.add_argument(
+        "--scale-width",
+        default=20.0,
+        type=float,
+        help="Coordinate-plane width for the drawing bounding box.",
+    )
+    lineart.add_argument(
+        "--threshold-mode",
+        choices=["auto", "fixed", "adaptive"],
+        default="auto",
+        help="Line extraction threshold strategy.",
+    )
+    lineart.add_argument(
+        "--line-thickness",
+        default=1,
+        type=int,
+        help="Preview line thickness in pixels.",
+    )
+    lineart.add_argument(
+        "--fit-mode",
+        choices=["linear", "quadratic", "mixed"],
+        default="mixed",
+        help="Curve fitting mode.",
+    )
+    lineart.add_argument(
+        "--cleaned-input",
+        type=Path,
+        help="Optional cleaned line-art image used instead of the raw input.",
+    )
+
     parser.add_argument("--input", type=Path, help="Input image path.")
     parser.add_argument("--target", default=200, type=int, help="Approximate equation count.")
     parser.add_argument("--out", type=Path, help="Output directory.")
@@ -103,6 +146,22 @@ def main() -> None:
         )
         print(f"Wrote {result.shape_count} vector shapes to {result.out_dir}")
         print(f"Desmos vector segments: {result.segment_count}")
+        return
+    if args.command == "lineart":
+        result = run_lineart_pipeline(
+            image_path=args.input,
+            out_dir=args.out,
+            target=args.target,
+            scale_width=args.scale_width,
+            threshold_mode=args.threshold_mode,
+            line_thickness=args.line_thickness,
+            fit_mode=args.fit_mode,
+            cleaned_input=args.cleaned_input,
+        )
+        print(f"Wrote {result.equation_count} line-art equations to {result.out_dir}")
+        print(f"Traced strokes: {result.stroke_count}")
+        print(f"Preview: {result.function_preview_path}")
+        print(f"JSON: {result.json_path}")
         return
 
     if args.input is None or args.out is None:
