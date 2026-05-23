@@ -146,7 +146,7 @@ python -m mathequations lineart \
   --fit-mode mixed
 ```
 
-This pipeline extracts faint lines, skeletonizes them into stroke centerlines, traces open paths, fits a mix of straight, quadratic, and parametric cubic Bezier equations, and writes:
+The default `--trace-mode skeleton-v1` path extracts faint lines, skeletonizes them into stroke centerlines, traces open paths, fits a mix of straight, quadratic, and parametric cubic Bezier equations, and writes:
 
 - `line_mask.png`
 - `skeleton.png`
@@ -159,6 +159,42 @@ This pipeline extracts faint lines, skeletonizes them into stroke centerlines, t
 - `selected_equations.txt`
 
 Parameter equations are intentional here. They preserve hair, eyes, fingers, and ornament curves much better than forcing every stroke into `y = f(x)`.
+
+### Centerline V2
+
+Use Centerline V2 when V1 turns pencil strokes into broken dashes:
+
+```bash
+python -m mathequations lineart \
+  --input path/to/sketch.jpeg \
+  --out output/nan_lineart_v2_1200 \
+  --target 1200 \
+  --fit-mode mixed \
+  --trace-mode centerline-v2 \
+  --preprocess-scale 4 \
+  --render-scale 4 \
+  --max-bridge-gap 16 \
+  --bridge-angle-threshold 45 \
+  --local-threshold sauvola \
+  --keep-diagnostics
+```
+
+V2 processes the image at higher resolution, uses local thresholding, builds a skeleton graph, scores endpoint bridges, pairs likely junction continuations, reconstructs longer stroke chains, and renders supersampled previews.
+
+Extra V2 outputs include:
+
+- `clean_input_highres.png`
+- `line_mask_highres.png`
+- `skeleton_highres.png`
+- `endpoint_overlay.png`
+- `bridge_candidates.json`
+- `bridged_strokes_preview.png`
+- `function_preview_highres.png`
+- `trace_diagnostics.json`
+
+`segments.json` metadata records `trace_mode`, preprocess/render scales, raw branch count, endpoint count, accepted bridge count, final chain count, dropped fragment count, and equation count.
+
+Higher `--target` does not fix broken stroke reconstruction. If output is dashed, inspect the V2 diagnostics and tune thresholding or bridge parameters.
 
 ## Tests
 
