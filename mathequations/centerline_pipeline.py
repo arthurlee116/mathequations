@@ -123,6 +123,9 @@ def run_centerline_pipeline(
     bridge_angle_threshold: float = 45,
     local_threshold: str = "sauvola",
     keep_diagnostics: bool = False,
+    min_component_area: int = 9,
+    min_chain_length: float = 16.0,
+    min_segment_length: float = 0.1,
 ) -> LineartPipelineResult:
     """Run Centerline V2 and write previews, diagnostics, equations, and JSON."""
     if preprocess_scale < 1:
@@ -141,7 +144,9 @@ def run_centerline_pipeline(
     highres = prepare_highres_lineart(image, scale=preprocess_scale)
     cv2.imwrite(str(out_dir / "clean_input_highres.png"), highres)
 
-    mask_highres = build_local_line_mask(highres, threshold_mode=local_threshold, min_component_area=2)
+    mask_highres, removed_speckles = build_local_line_mask(
+        highres, threshold_mode=local_threshold, min_component_area=min_component_area
+    )
     cv2.imwrite(str(out_dir / "line_mask_highres.png"), mask_highres)
     mask = _downsample_mask(mask_highres, image_size=(width, height))
     cv2.imwrite(str(out_dir / "line_mask.png"), mask)
@@ -163,7 +168,13 @@ def run_centerline_pipeline(
     )
     accepted_bridges = select_bridges(bridge_candidates)
     junction_pairs = pair_junction_branches(graph)
-    chains_highres = build_stroke_chains(graph, raw_branches, accepted_bridges, junction_pairs)
+    chains_highres = build_stroke_chains(
+        graph,
+        raw_branches,
+        accepted_bridges,
+        junction_pairs,
+        min_chain_length=min_chain_length,
+    )
     if not chains_highres:
         raise ValueError("No centerline stroke chains found")
 
@@ -197,7 +208,7 @@ def run_centerline_pipeline(
             encoding="utf-8",
         )
         (out_dir / "mask_diagnostics.json").write_text(
-            json.dumps(line_mask_diagnostics(mask_highres), indent=2),
+            json.dumps(line_mask_diagnostics(mask_highres, removed_speckle_count=removed_speckles), indent=2),
             encoding="utf-8",
         )
 
@@ -208,7 +219,7 @@ def run_centerline_pipeline(
         _chain_to_cartesian(chain, width=width, height=height, scale=scale)
         for chain in base_chains
     ]
-    segments = fit_stroke_chains(cartesian_chains, target=target, fit_mode=fit_mode)
+    segments = fit_stroke_chains(cartesian_chains, target=target, fit_mode=fit_mode, min_length=min_segment_length)
 
     preview_paths = render_curve_segment_previews(
         segments,

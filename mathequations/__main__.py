@@ -8,7 +8,9 @@ from pathlib import Path
 from .lineart_pipeline import run_lineart_pipeline
 from .lucas_pipeline import run_lucas_pipeline
 from .lucas_vector_pipeline import run_lucas_vector_pipeline
+from .face_feature_patch import patch_face_feature_output
 from .pipeline import run_pipeline
+from .point_cloud_pipeline import run_point_cloud_pipeline
 from .thick_lineart_pipeline import run_thick_lineart_pipeline
 
 
@@ -145,6 +147,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write Centerline V2 diagnostic overlays and JSON.",
     )
+    lineart.add_argument(
+        "--min-component-area",
+        default=9,
+        type=int,
+        help="Centerline V2 minimum connected component area in high-res pixels.",
+    )
+    lineart.add_argument(
+        "--min-chain-length",
+        default=16.0,
+        type=float,
+        help="Centerline V2 minimum stroke chain length in high-res pixels.",
+    )
+    lineart.add_argument(
+        "--min-segment-length",
+        default=0.1,
+        type=float,
+        help="Centerline V2 minimum fitted segment Cartesian length.",
+    )
 
     thick_lineart = subparsers.add_parser(
         "thick-lineart",
@@ -212,6 +232,51 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write thick-lineart diagnostic JSON files.",
     )
 
+    docx_point_cloud = subparsers.add_parser(
+        "docx-point-cloud",
+        help="Render a DOCX coordinate point cloud as colored horizontal equations.",
+    )
+    docx_point_cloud.add_argument("--input", required=True, type=Path, help="Source image used for color sampling.")
+    docx_point_cloud.add_argument("--reference-docx", required=True, type=Path, help="DOCX containing (x, -y) point coordinates.")
+    docx_point_cloud.add_argument("--out", required=True, type=Path, help="Output directory.")
+    docx_point_cloud.add_argument(
+        "--scale-width",
+        default=20.0,
+        type=float,
+        help="Coordinate-plane width for the point-cloud foreground.",
+    )
+    docx_point_cloud.add_argument(
+        "--render-scale",
+        default=4,
+        type=int,
+        help="Supersampling factor for point-cloud previews.",
+    )
+    docx_point_cloud.add_argument(
+        "--clean-kernel-size",
+        default=3,
+        type=int,
+        help="Morphology kernel used to remove edge debris from point masks.",
+    )
+    docx_point_cloud.add_argument(
+        "--min-component-area",
+        default=6,
+        type=int,
+        help="Smallest connected point-mask component to keep.",
+    )
+
+    patch_face = subparsers.add_parser(
+        "patch-face-features",
+        help="Replace small face features in a line-art output with reference DOCX points.",
+    )
+    patch_face.add_argument("--segments", required=True, type=Path, help="Input segments.json path.")
+    patch_face.add_argument("--reference-docx", required=True, type=Path, help="Reference DOCX point list.")
+    patch_face.add_argument("--out", required=True, type=Path, help="Patched output directory.")
+    patch_face.add_argument(
+        "--source-dir",
+        type=Path,
+        help="Output directory to copy before patching. Defaults to the segments.json directory.",
+    )
+
     parser.add_argument("--input", type=Path, help="Input image path.")
     parser.add_argument("--target", default=200, type=int, help="Approximate equation count.")
     parser.add_argument("--out", type=Path, help="Output directory.")
@@ -272,6 +337,9 @@ def main() -> None:
             bridge_angle_threshold=args.bridge_angle_threshold,
             local_threshold=args.local_threshold,
             keep_diagnostics=args.keep_diagnostics,
+            min_component_area=args.min_component_area,
+            min_chain_length=args.min_chain_length,
+            min_segment_length=args.min_segment_length,
         )
         print(f"Wrote {result.equation_count} line-art equations to {result.out_dir}")
         print(f"Trace mode: {result.trace_mode}")
@@ -303,6 +371,33 @@ def main() -> None:
         print(f"Color counts: {result.color_counts}")
         print(f"Preview: {result.function_preview_path}")
         print(f"JSON: {result.json_path}")
+        return
+    if args.command == "docx-point-cloud":
+        result = run_point_cloud_pipeline(
+            image_path=args.input,
+            reference_docx=args.reference_docx,
+            out_dir=args.out,
+            scale_width=args.scale_width,
+            render_scale=args.render_scale,
+            clean_kernel_size=args.clean_kernel_size,
+            min_component_area=args.min_component_area,
+        )
+        print(f"Wrote {result.equation_count} point-cloud equations to {result.out_dir}")
+        print(f"Point count: {result.point_count}")
+        print(f"Color counts: {result.color_counts}")
+        print(f"Preview: {result.function_preview_path}")
+        print(f"Direct point render: {result.direct_preview_path}")
+        print(f"JSON: {result.json_path}")
+        return
+    if args.command == "patch-face-features":
+        preview = patch_face_feature_output(
+            segments_path=args.segments,
+            reference_docx=args.reference_docx,
+            out_dir=args.out,
+            source_dir=args.source_dir,
+        )
+        print(f"Patched preview: {preview}")
+        print(f"Patched JSON: {args.out / 'segments.json'}")
         return
 
     if args.input is None or args.out is None:

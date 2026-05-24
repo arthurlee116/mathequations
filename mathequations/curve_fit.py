@@ -247,11 +247,16 @@ def fit_stroke_chains(
     *,
     target: int,
     fit_mode: str,
+    min_length: float = 0.05,
 ) -> list[dict[str, Any]]:
     """Fit reconstructed centerline chains without fragmenting smooth strokes."""
     if target < 1:
         raise ValueError("target must be at least 1")
-    useful = [chain for chain in chains if len(getattr(chain, "points", [])) >= 2]
+    useful = [
+        chain
+        for chain in chains
+        if len(getattr(chain, "points", [])) >= 2 and getattr(chain, "length", 0.0) >= min_length
+    ]
     if not useful:
         return []
 

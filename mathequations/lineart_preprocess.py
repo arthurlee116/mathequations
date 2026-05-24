@@ -126,8 +126,8 @@ def build_local_line_mask(
     *,
     threshold_mode: str = "sauvola",
     min_component_area: int = 2,
-) -> np.ndarray:
-    """Return a 0/255 local-threshold mask for Centerline V2."""
+) -> tuple[np.ndarray, int]:
+    """Return a 0/255 local-threshold mask and the removed speckle count for Centerline V2."""
     if min_component_area < 1:
         raise ValueError("min_component_area must be at least 1")
     gray = cv2.cvtColor(_as_bgr(image), cv2.COLOR_BGR2GRAY)
@@ -148,11 +148,11 @@ def build_local_line_mask(
         mask = _fixed_mask(gray)
     else:
         raise ValueError("threshold_mode must be one of: sauvola, niblack, adaptive, fixed")
-    filtered, _, _ = _filter_components(mask, min_component_area=min_component_area)
-    return filtered
+    filtered, _, removed = _filter_components(mask, min_component_area=min_component_area)
+    return filtered, removed
 
 
-def line_mask_diagnostics(mask: np.ndarray) -> dict[str, float | int]:
+def line_mask_diagnostics(mask: np.ndarray, removed_speckle_count: int = 0) -> dict[str, float | int]:
     """Summarize foreground density and connected-component shape for diagnostics."""
     binary = (mask > 0).astype(np.uint8)
     count, _labels, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
@@ -162,7 +162,7 @@ def line_mask_diagnostics(mask: np.ndarray) -> dict[str, float | int]:
         "foreground_density": float(cv2.countNonZero(binary) / binary.size),
         "component_count": len(component_sizes),
         "median_component_size": median_size,
-        "removed_speckle_count": 0,
+        "removed_speckle_count": removed_speckle_count,
     }
 
 

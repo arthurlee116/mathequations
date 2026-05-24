@@ -57,6 +57,12 @@ class CenterlinePipelineRenderingTests(unittest.TestCase):
                 "--local-threshold",
                 "sauvola",
                 "--keep-diagnostics",
+                "--min-component-area",
+                "6",
+                "--min-chain-length",
+                "12.0",
+                "--min-segment-length",
+                "0.1",
             ]
         )
 
@@ -67,6 +73,9 @@ class CenterlinePipelineRenderingTests(unittest.TestCase):
         self.assertEqual(args.bridge_angle_threshold, 40)
         self.assertEqual(args.local_threshold, "sauvola")
         self.assertTrue(args.keep_diagnostics)
+        self.assertEqual(args.min_component_area, 6)
+        self.assertEqual(args.min_chain_length, 12.0)
+        self.assertEqual(args.min_segment_length, 0.1)
 
     def test_centerline_v2_pipeline_writes_outputs_and_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:

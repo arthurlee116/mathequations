@@ -23,7 +23,7 @@ class CenterlinePreprocessTests(unittest.TestCase):
         cv2.line(image, (8, 20), (52, 20), (220, 220, 220), thickness=1)
         highres = prepare_highres_lineart(image, scale=4)
 
-        mask = build_local_line_mask(highres, threshold_mode="sauvola", min_component_area=2)
+        mask, _ = build_local_line_mask(highres, threshold_mode="sauvola", min_component_area=2)
 
         self.assertGreater(cv2.countNonZero(mask), 120)
         self.assertGreater(int(mask[80, 120]), 0)
@@ -34,8 +34,9 @@ class CenterlinePreprocessTests(unittest.TestCase):
         image[4, 4] = [0, 0, 0]
         image[45, 45] = [0, 0, 0]
 
-        mask = build_local_line_mask(image, threshold_mode="fixed", min_component_area=3)
+        mask, removed_count = build_local_line_mask(image, threshold_mode="fixed", min_component_area=3)
 
+        self.assertEqual(removed_count, 2)
         self.assertEqual(int(mask[4, 4]), 0)
         self.assertEqual(int(mask[45, 45]), 0)
         self.assertGreater(int(mask[25, 25]), 0)
@@ -46,12 +47,12 @@ class CenterlinePreprocessTests(unittest.TestCase):
         mask[5, 5:10] = 255
         mask[12:15, 12:15] = 255
 
-        diagnostics = line_mask_diagnostics(mask)
+        diagnostics = line_mask_diagnostics(mask, removed_speckle_count=5)
 
         self.assertAlmostEqual(diagnostics["foreground_density"], 14 / 400)
         self.assertEqual(diagnostics["component_count"], 2)
         self.assertEqual(diagnostics["median_component_size"], 7.0)
-        self.assertIn("removed_speckle_count", diagnostics)
+        self.assertEqual(diagnostics["removed_speckle_count"], 5)
 
 
 if __name__ == "__main__":

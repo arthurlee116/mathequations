@@ -96,6 +96,9 @@ def run_lineart_pipeline(
     bridge_angle_threshold: float = 45,
     local_threshold: str = "sauvola",
     keep_diagnostics: bool = False,
+    min_component_area: int = 9,
+    min_chain_length: float = 16.0,
+    min_segment_length: float = 0.1,
 ) -> LineartPipelineResult:
     """Run the line-art conversion and write previews, equations, and JSON."""
     if target < 1:
@@ -121,6 +124,9 @@ def run_lineart_pipeline(
             bridge_angle_threshold=bridge_angle_threshold,
             local_threshold=local_threshold,
             keep_diagnostics=keep_diagnostics,
+            min_component_area=min_component_area,
+            min_chain_length=min_chain_length,
+            min_segment_length=min_segment_length,
         )
 
     out_dir = Path(out_dir)
